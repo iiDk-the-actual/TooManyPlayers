@@ -1,5 +1,5 @@
 ﻿<p align="center">
-  <a href="#"><img src="https://i.imgur.com/zgkNqNl.png"></a>
+  <a href="#"><img src="https://i.imgur.com/zgkNqNl.png" width = 500px></a>
 </p>
 
 # TooManyPlayers
