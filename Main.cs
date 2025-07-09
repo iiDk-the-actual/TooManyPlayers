@@ -13,10 +13,10 @@ namespace TooManyPlayers
         private float isOpenDelay;
         public void Start()
         {
-            NetworkSystem.Instance.OnJoinedRoomEvent += OnJoinRoom;
+            //NetworkSystem.Instance.OnJoinedRoomEvent += OnJoinRoom;
         }
 
-        public void OnJoinRoom() =>
+        /* void OnJoinRoom() =>
             CoroutineManager.instance.StartCoroutine(OnJoinRoomCoroutine());
 
         public IEnumerator OnJoinRoomCoroutine()
@@ -24,7 +24,7 @@ namespace TooManyPlayers
             yield return new WaitForSeconds(0.5f);
             if (!NetworkSystem.Instance.GameModeString.Contains($"<TOOMANYPLAYERS{PluginInfo.Version}>"))
                 NetworkSystem.Instance.ReturnToSinglePlayer();
-        }
+        }*/
 
         public void Update()
         {
