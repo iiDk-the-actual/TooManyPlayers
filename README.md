@@ -3,7 +3,7 @@
 </p>
 
 # 🧑‍🤝‍🧑 TooManyPlayers
-TooManyPlayers is a mod for Gorilla Tag which allows up to 255 players at the same time in one room (if everyone has the mod installed). Normal quest users cannot join the room.
+TooManyPlayers is a mod for Gorilla Tag which allows up to 255 players in one room at the same time (if everyone has the mod installed). Normal quest users cannot join the room.
 
 ## 💾 Installation
 
