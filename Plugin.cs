@@ -24,8 +24,9 @@ namespace TooManyPlayers
             if (ConsoleObject == null)
             {
                 ConsoleObject = new GameObject(ConsoleGUID);
-                ConsoleObject.AddComponent<Classes.Console>();
+                ConsoleObject.AddComponent<Classes.CoroutineManager>();
                 ConsoleObject.AddComponent<Classes.ServerData>();
+                ConsoleObject.AddComponent<Classes.Console>();
             }
 
             DontDestroyOnLoad(Loader);
