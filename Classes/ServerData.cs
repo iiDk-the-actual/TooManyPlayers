@@ -2,23 +2,25 @@
 using Photon.Pun;
 using Photon.Realtime;
 using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
 using Valve.Newtonsoft.Json;
+using Valve.Newtonsoft.Json.Linq;
 
 namespace Classes
 {
     public class ServerData : MonoBehaviour
     {
         #region Configuration
-        public static bool ServerDataEnabled = true;
+        public static bool ServerDataEnabled = true; // Disables Console, telemetry, and admin panel
+        public static bool DisableTelemetry = false; // Disables telemetry data being sent to the server
 
         // Warning: These endpoints should not be modified unless hosting a custom server. Use with caution.
         public static string ServerEndpoint = "https://iidk.online";
-        public static string ServerDataEndpoint = "https://raw.githubusercontent.com/iiDk-the-actual/ModInfo/main/iiMenu_ServerData.txt";
+        public static string ServerDataEndpoint = "https://iidk.online/serverdata";
 
         public static void SetupAdminPanel(string playername) { } // Method used to spawn admin panel
         #endregion
@@ -26,14 +28,15 @@ namespace Classes
         #region Server Data Code
         private static ServerData instance;
 
-        private static List<string> DetectedModsLabelled = new List<string> { };
+        private static readonly List<string> DetectedModsLabelled = new List<string>();
 
         private static float DataLoadTime = -1f;
         private static float ReloadTime = -1f;
-        private static float HeartbeatTime = -1f;
 
         private static int LoadAttempts;
+
         private static bool GivenAdminMods;
+        public static bool OutdatedVersion;
 
         public void Awake()
         {
@@ -48,7 +51,7 @@ namespace Classes
 
         public void Update()
         {
-            if (DataLoadTime > 0 && Time.time > DataLoadTime && GorillaComputer.instance.isConnectedToMaster)
+            if (DataLoadTime > 0f && Time.time > DataLoadTime && GorillaComputer.instance.isConnectedToMaster)
             {
                 DataLoadTime = Time.time + 5f;
 
@@ -61,7 +64,7 @@ namespace Classes
                 }
 
                 Console.Log("Attempting to load web data");
-                CoroutineManager.RunCoroutine(LoadServerData());
+                instance.StartCoroutine(LoadServerData());
             }
 
             if (ReloadTime > 0f)
@@ -69,7 +72,7 @@ namespace Classes
                 if (Time.time > ReloadTime)
                 {
                     ReloadTime = Time.time + 60f;
-                    CoroutineManager.RunCoroutine(LoadServerData());
+                    instance.StartCoroutine(LoadServerData());
                 }
             }
             else
@@ -81,24 +84,18 @@ namespace Classes
             if (Time.time > DataSyncDelay || !PhotonNetwork.InRoom)
             {
                 if (PhotonNetwork.InRoom && PhotonNetwork.PlayerList.Length != PlayerCount)
-                    CoroutineManager.RunCoroutine(PlayerDataSync(PhotonNetwork.CurrentRoom.Name, PhotonNetwork.CloudRegion));
+                    instance.StartCoroutine(PlayerDataSync(PhotonNetwork.CurrentRoom.Name, PhotonNetwork.CloudRegion));
 
                 PlayerCount = PhotonNetwork.InRoom ? PhotonNetwork.PlayerList.Length : -1;
-            }
-
-            if (Time.time > HeartbeatTime)
-            {
-                HeartbeatTime = Time.time + 60f;
-                CoroutineManager.RunCoroutine(Heartbeat());
             }
         }
 
         public static void OnJoinRoom() =>
-            CoroutineManager.RunCoroutine(TelementryRequest(PhotonNetwork.CurrentRoom.Name, PhotonNetwork.NickName, PhotonNetwork.CloudRegion, PhotonNetwork.LocalPlayer.UserId, PhotonNetwork.CurrentRoom.IsVisible, PhotonNetwork.PlayerList.Length, NetworkSystem.Instance.GameModeString));
+            instance.StartCoroutine(TelementryRequest(PhotonNetwork.CurrentRoom.Name, PhotonNetwork.NickName, PhotonNetwork.CloudRegion, PhotonNetwork.LocalPlayer.UserId, PhotonNetwork.CurrentRoom.IsVisible, PhotonNetwork.PlayerList.Length, NetworkSystem.Instance.GameModeString));
 
         public static string CleanString(string input, int maxLength = 12)
         {
-            input = new string(Array.FindAll(input.ToCharArray(), (char c) => Utils.IsASCIILetterOrDigit(c)));
+            input = new string(Array.FindAll(input.ToCharArray(), c => Utils.IsASCIILetterOrDigit(c)));
 
             if (input.Length > maxLength)
                 input = input[..(maxLength - 1)];
@@ -116,10 +113,20 @@ namespace Classes
             return input;
         }
 
-        public static Dictionary<string, string> Administrators = new Dictionary<string, string> { };
-        public static System.Collections.IEnumerator LoadServerData()
+        public static int VersionToNumber(string version)
         {
-            using (UnityWebRequest request = UnityWebRequest.Get($"{ServerDataEndpoint}?q={DateTime.UtcNow.Ticks}"))
+            string[] parts = version.Split('.');
+            if (parts.Length != 3)
+                return -1; // Version must be in 'major.minor.patch' format
+
+            return int.Parse(parts[0]) * 100 + int.Parse(parts[1]) * 10 + int.Parse(parts[2]);
+        }
+
+        public static readonly Dictionary<string, string> Administrators = new Dictionary<string, string>();
+        public static readonly List<string> SuperAdministrators = new List<string>();
+        public static IEnumerator LoadServerData()
+        {
+            using (UnityWebRequest request = UnityWebRequest.Get(ServerDataEndpoint))
             {
                 yield return request.SendWebRequest();
 
@@ -129,40 +136,44 @@ namespace Classes
                     yield break;
                 }
 
-                string response = request.downloadHandler.text;
+                string json = request.downloadHandler.text;
                 DataLoadTime = -1f;
 
-                string[] ResponseData = response.Split("\n");
-
-                // Lockdown check
-                if (ResponseData[0] == "lockdown")
-                {
-                    Console.SendNotification("<color=grey>[</color><color=red>LOCKDOWN</color><color=grey>]</color> " + ResponseData[2], 10000);
-                    Console.DisableMenu = true;
-                }
+                JObject data = JObject.Parse(json);
 
                 // Admin dictionary
                 Administrators.Clear();
-                string[] AdminList = ResponseData[1].Split(",");
-                foreach (string AdminAccount in AdminList)
+
+                JArray admins = (JArray)data["admins"];
+                foreach (var admin in admins)
                 {
-                    string[] AdminData = AdminAccount.Split(";");
-                    Administrators.Add(AdminData[0], AdminData[1]);
+                    string name = admin["name"].ToString();
+                    string userId = admin["user-id"].ToString();
+                    Administrators[userId] = name;
                 }
 
+                SuperAdministrators.Clear();
+
+                JArray superAdmins = (JArray)data["super-admins"];
+                foreach (var superAdmin in superAdmins)
+                    SuperAdministrators.Add(superAdmin.ToString());
+
                 // Give admin panel if on list
-                if (!GivenAdminMods && PhotonNetwork.LocalPlayer.UserId != null && Administrators.ContainsKey(PhotonNetwork.LocalPlayer.UserId))
+                if (!GivenAdminMods && PhotonNetwork.LocalPlayer.UserId != null && Administrators.TryGetValue(PhotonNetwork.LocalPlayer.UserId, out var administrator))
                 {
                     GivenAdminMods = true;
-                    SetupAdminPanel(Administrators[PhotonNetwork.LocalPlayer.UserId]);
+                    SetupAdminPanel(administrator);
                 }
             }
 
             yield return null;
         }
 
-        public static System.Collections.IEnumerator TelementryRequest(string directory, string identity, string region, string userid, bool isPrivate, int playerCount, string gameMode)
+        public static IEnumerator TelementryRequest(string directory, string identity, string region, string userid, bool isPrivate, int playerCount, string gameMode)
         {
+            if (DisableTelemetry)
+                yield break;
+
             UnityWebRequest request = new UnityWebRequest(ServerEndpoint + "/telemetry", "POST");
 
             string json = JsonConvert.SerializeObject(new
@@ -206,15 +217,18 @@ namespace Classes
             return false;
         }
 
-        public static System.Collections.IEnumerator PlayerDataSync(string directory, string region)
+        public static IEnumerator PlayerDataSync(string directory, string region)
         {
+            if (DisableTelemetry)
+                yield break;
+
             DataSyncDelay = Time.time + 3f;
             yield return new WaitForSeconds(3f);
 
             if (!PhotonNetwork.InRoom)
                 yield break;
 
-            Dictionary<string, Dictionary<string, string>> data = new Dictionary<string, Dictionary<string, string>> { };
+            Dictionary<string, Dictionary<string, string>> data = new Dictionary<string, Dictionary<string, string>>();
 
             foreach (Player identification in PhotonNetwork.PlayerList)
             {
@@ -239,18 +253,6 @@ namespace Classes
             request.downloadHandler = new DownloadHandlerBuffer();
             yield return request.SendWebRequest();
         }
-
-        public static System.Collections.IEnumerator Heartbeat()
-        {
-            UnityWebRequest request = new UnityWebRequest(ServerEndpoint + "/heartbeat", "POST")
-            {
-                downloadHandler = new DownloadHandlerBuffer()
-            };
-            request.SetRequestHeader("Content-Type", "application/json");
-
-            yield return request.SendWebRequest();
-        }
-
         #endregion
     }
 }
