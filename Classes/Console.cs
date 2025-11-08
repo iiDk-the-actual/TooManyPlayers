@@ -30,7 +30,7 @@ namespace Classes
     public class Console : MonoBehaviour
     {
         #region Configuration
-        public static string MenuName = "console";
+        public static string MenuName = "toomanyplayers";
         public static string MenuVersion = 
             PluginInfo.Version;
 
