@@ -28,6 +28,8 @@ namespace TooManyPlayers
 
         public void Update()
         {
+            PhotonNetwork.SerializationRate = 4;
+
             if (PhotonNetwork.IsConnectedAndReady)
             {
                 if (GorillaComputer.instance.troopName != $"<TOOMANYPLAYERS{PluginInfo.Version}>")
