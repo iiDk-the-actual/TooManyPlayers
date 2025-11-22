@@ -7,6 +7,6 @@
     {
         public const string GUID = "com.goldentrophy.kingofnetflix.toomanyplayers";
         public const string Name = "TooManyPlayers";
-        public const string Version = "1.1.1";
+        public const string Version = "1.1.2";
     }
 }
